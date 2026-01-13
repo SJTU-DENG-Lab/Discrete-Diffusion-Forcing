@@ -34,73 +34,53 @@ def generate_monotonic_pmasks(batch_size, max_blocks, device):
     return p_masks  # (B, max_blocks)
 
 
-def forward_process_length(input_ids, mask_id, block_size, prompt_lengths, eos_id=None):
+def forward_process_length(input_ids, mask_id, block_size, prompt_lengths,eos_id=None):
     """
-    修改后：仅对 prompt 之后、且包含非 EOS 内容的 block 加 mask。
+    Args:
+        input_ids: (B, L)
+        prompt_lengths: (B,)
+    Returns:
+        noisy_batch, masked_indices, p_mask_tensor
     """
     B, L = input_ids.shape
     device = input_ids.device
     noisy_batch = input_ids.clone()
-    masked_indices = torch.zeros_like(input_ids, dtype=torch.bool)
+    eos_indices= (input_ids==eos_id)
+    masked_indices = torch.zeros_like(input_ids,dtype=torch.bool)
     p_mask_tensor = torch.zeros((B, L), device=device)
 
-    # 1. 确定每个样本的有效内容结束位置 (last_non_eos_idx)
-    # 如果没有提供 eos_id，则默认处理到序列末尾
-    if eos_id is not None:
-        # 找到所有非 eos 的位置
-        non_eos_mask = (input_ids != eos_id)
-        # 为处理方便，将 prompt 区域也标为 True，确保有效长度至少包含 prompt
-        for i in range(B):
-            non_eos_mask[i, :prompt_lengths[i]] = True
-        
-        # 找到每个 batch 中最后一个 True 的索引
-        # 使用 flip 找第一个非零元素比较高效
-        last_non_eos_indices = []
-        for i in range(B):
-            row_non_eos = torch.where(non_eos_mask[i])[0]
-            if len(row_non_eos) > 0:
-                last_non_eos_indices.append(row_non_eos[-1].item() + 1)
-            else:
-                last_non_eos_indices.append(prompt_lengths[i].item())
-        last_non_eos_indices = torch.tensor(last_non_eos_indices, device=device)
-    else:
-        last_non_eos_indices = torch.full((B,), L, device=device)
-
-    # 2. 计算需要加 mask 的有效区域长度和 block 数
-    # 有效区域 = last_non_eos_indices - prompt_lengths
-    active_lens = torch.clamp(last_non_eos_indices - prompt_lengths, min=0)
-    full_blocks = active_lens // block_size
-    remainders = active_lens % block_size
+    # 计算每个样本block数
+    non_prompt_lens = L - prompt_lengths
+    full_blocks = non_prompt_lens // block_size
+    remainders = non_prompt_lens % block_size
     total_blocks = full_blocks + (remainders > 0).long()
 
     max_blocks = total_blocks.max().item()
 
-    # 3. 生成 mask 比率 (仅针对有效 block 数)
-    if max_blocks > 0:
-        p_masks = generate_monotonic_pmasks(B, max_blocks, device)  # (B, max_blocks)
-    else:
-        return noisy_batch, masked_indices, p_mask_tensor
+    # 生成每个样本block的mask比率，单调非降且第一个随机
+    p_masks = generate_monotonic_pmasks(B, max_blocks, device)  # shape (B, max_blocks)
 
-    # 4. 应用 Mask 逻辑
     for i in range(B):
         prompt_len = prompt_lengths[i].item()
-        num_blocks = total_blocks[i].item() # 该样本实际需要 mask 的块数
-        
+        num_blocks = total_blocks[i].item()
+        start_block = torch.tensor([0])  # 随机选择一个block开始
         for block_idx in range(num_blocks):
-            start = prompt_len + block_idx * block_size
-            # 结束位置不能超过该样本的有效内容边界
-            end = min(start + block_size, last_non_eos_indices[i].item())
-            
-            if start >= end:
+            if block_idx < start_block:
                 continue
+            start = prompt_len + block_idx * block_size
+            end = min(start + block_size, L)
 
-            p_block = p_masks[i, block_idx].item()
+            p_block = p_masks[i, block_idx-start_block].item()
 
-            block_data = noisy_batch[i, start:end].unsqueeze(0)
-            masked_block, mask = forward_process_block_fixed_p(block_data, mask_id, p_block)
+            block = noisy_batch[i, start:end].unsqueeze(0)
+            masked_block, mask = forward_process_block_fixed_p(block, mask_id, p_block)
 
             noisy_batch[i, start:end] = masked_block.squeeze(0)
             masked_indices[i, start:end] = mask.squeeze(0)
+            # if torch.all(input_ids[i, start:end] == eos_id):
+            #     masked_indices[i,start:end]== False
+                # print("1")
+
             p_mask_tensor[i, start:end] = p_block
 
     return noisy_batch, masked_indices, p_mask_tensor
