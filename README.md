@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://arxiv.org/abs/2508.09192"><b>📄 Paper</b></a> •
-  <a href="https://zhijie-group.github.io/Discrete-Diffusion-Forcing/"><b>📝 Blog Post</b></a> •
+  <a href="https://SJTU-DENG-Lab.github.io/Discrete-Diffusion-Forcing/"><b>📝 Blog Post</b></a> •
   <a href="https://huggingface.co/spaces/zhijie3/D2F-LLaDA-Instruct-8B"><b>🚀 Online Demo</b></a> •
   <a href="https://huggingface.co/SJTU-Deng-Lab/D2F_Dream_Base_7B_Lora"><b>🤗 D2F-Dream LoRA</b></a> •
   <a href="https://huggingface.co/SJTU-Deng-Lab/D2F_LLaDA_Instruct_8B_Lora"><b>🤗 D2F-LLaDA LoRA</b></a> 
@@ -273,7 +273,7 @@ First, clone the repository and set up the environment.
 
 ```shell
 # Clone the repository
-git clone https://github.com/zhijie-group/Discrete-Diffusion-Forcing.git
+git clone https://github.com/SJTU-DENG-Lab/Discrete-Diffusion-Forcing.git
 cd Discrete-Diffusion-Forcing
 ```
 
